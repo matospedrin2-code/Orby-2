@@ -1,0 +1,71 @@
+{
+  "expo": {
+    "name": "Orby",
+    "slug": "frontend",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "frontend",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.emergent.orbylive.u6y4mh",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Orby enxerga e acompanha você com os olhos",
+        "NSMicrophoneUsageDescription": "Orby ouve sua voz para conversar com você",
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#06090F"
+      },
+      "package": "com.emergent.orbylive.u6y4mh",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-status-bar",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Orby ouve sua voz para conversar com você"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Orby enxerga e acompanha você com os olhos"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

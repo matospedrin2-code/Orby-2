@@ -1,0 +1,120 @@
+{
+  "app_name": "Orby",
+  "personality": "7 Dark-First Utility DARK",
+  "personality_one_liner": "A sleek, responsive, cyberpunk-inspired companion robot interface prioritizing tactical HUD aesthetics and fluid emotional expression.",
+  "color": {
+    "surface": "#06090F",
+    "onSurface": "#E0F7FF",
+    "surfaceSecondary": "#0C121C",
+    "onSurfaceSecondary": "#D2F5FF",
+    "surfaceTertiary": "#131A26",
+    "onSurfaceTertiary": "#D2F5FF",
+    "surfaceInverse": "#D2F5FF",
+    "onSurfaceInverse": "#06090F",
+    "brand": "#00F0FF",
+    "onBrand": "#06090F",
+    "brandPrimary": "#00F0FF",
+    "onBrandPrimary": "#06090F",
+    "brandSecondary": "#008B99",
+    "onBrandSecondary": "#E0F7FF",
+    "brandTertiary": "rgba(0, 240, 255, 0.15)",
+    "onBrandTertiary": "#00F0FF",
+    "success": "#00FF88",
+    "onSuccess": "#06090F",
+    "warning": "#FFB000",
+    "onWarning": "#06090F",
+    "error": "#FF2A55",
+    "onError": "#E0F7FF",
+    "info": "#00F0FF",
+    "onInfo": "#06090F",
+    "border": "rgba(0, 240, 255, 0.15)",
+    "borderStrong": "rgba(0, 240, 255, 0.45)",
+    "divider": "rgba(0, 240, 255, 0.2)",
+    "muted": "#4ACEEB",
+    "hudGradientStart": "rgba(8, 12, 20, 0.95)",
+    "hudGradientEnd": "rgba(12, 18, 28, 0.98)"
+  },
+  "typography": {
+    "displayFontFamily": "Rajdhani",
+    "textFontFamily": "IBM Plex Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "giant": 64
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing for the HUD layout to avoid clutter, with tight padding inside tactical data units.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "stack_only",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use subtle blur under the sliding left HUD panel to give depth.",
+      "Apply glass effects to the bottom action bar floating over the face."
+    ],
+    "dont's": [
+      "Do not over-blur the background where the face is completely obscured.",
+      "Do not use heavy shadows, rely on neon border glows (borderStrong)."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "CompanionFace",
+      "purpose": "The main interactive hub containing the animated Orby face, wake-word rest mode, and the sliding tactical HUD.",
+      "states": {
+        "loading": "Dark screen with a glowing cyan loading ring in the center.",
+        "empty": "Not applicable; this is an always-on companion state.",
+        "error": "HUD drops in displaying a connection offline state with a retry command."
+      },
+      "layout": "Full-screen absolute positioning for the robot face (animated via Reanimated). Left absolute panel (width: 75%) slides in for HUD ('Resumo' or Clock/Battery stats). Bottom floating action bar for 'Gemini Live' and mic status."
+    }
+  ],
+  "images": {
+    "abstract_hud_bg": {
+      "url": "https://images.unsplash.com/photo-1709990740078-05aa8ee5b9b7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHwzfHxkYXJrJTIwY3liZXJwdW5rJTIwbmVvbiUyMGN5YW4lMjBhYnN0cmFjdCUyMHRleHR1cmV8ZW58MHx8fHwxNzkzMzkwNzYxfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "dark cyan abstract curves"
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: The prompt user requested 'weight 800' for the clock. Because we MUST cap font weights at 500, use 'Rajdhani' (or another heavy-display font like Anton) at size 64 and weight 500. This achieves the heavy tactical look without breaking the UX rule.",
+    "Implement the left HUD panel using a chamfered corner effect. Use react-native-svg for the polygon background if native borders don't chamfer, or use careful border manipulation.",
+    "The HUD background should use the linear gradient explicitly provided (hudGradientStart to hudGradientEnd).",
+    "Add 2px neon cyan border to the HUD panel: color '#00F0FF', with a drop shadow of rgba(0, 240, 255, 0.45) for the glow effect.",
+    "Add the 3 skewed LED stripes at the bottom-right of the HUD as specified: skewX(-32deg), 14x4 dimensions, 5px gap.",
+    "The robot face MUST be heavily animated using react-native-reanimated for eye tracking, blinking (squash/stretch), and expressions. Shift the face to the right when the left HUD opens.",
+    "Bottom action bar must include a 'Gemini Live' capsule button with a 'sparkle' or 'vision' icon (use Phosphor icons).",
+    "Text in the 'Resumo' panel uses line-height 1.6 and color #D2F5FF.",
+    "No indigo, purple, or pure navy colors anywhere. Adhere strictly to the Dark-First Utility constraints with the Web3/Cyberpunk electric neon cyan accent."
+  ]
+}
