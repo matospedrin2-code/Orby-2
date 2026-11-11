@@ -1,4 +1,4 @@
-import { ClockCounterClockwise, Trash } from "phosphor-react-native";
+import { ClockCounterClockwise, Keyboard, Smiley, Trash } from "phosphor-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import type { Settings } from "@/src/api";
@@ -29,6 +29,8 @@ type Props = {
   onChange: (s: Partial<Settings>) => void;
   onClose: () => void;
   onHistory: () => void;
+  onType: () => void;
+  onGallery: () => void;
   onClearMemories: () => void;
   onTestVoice: () => void;
 };
@@ -74,6 +76,20 @@ export function SettingsSheet(p: Props) {
   return (
     <Sheet visible={p.visible} title="AJUSTES DO ORBY" onClose={() => { p.onChange({ name: name.trim() }); p.onClose(); }} testID="settings-sheet">
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.btnRow}>
+          <Pressable onPress={p.onType} style={styles.ghostBtn} testID="type-message-button">
+            <Keyboard size={18} color={colors.brand} />
+            <Text style={styles.ghostTxt}>Digitar mensagem</Text>
+          </Pressable>
+          <Pressable onPress={p.onHistory} style={styles.ghostBtn} testID="settings-history-top-button">
+            <ClockCounterClockwise size={18} color={colors.brand} />
+            <Text style={styles.ghostTxt}>Histórico</Text>
+          </Pressable>
+          <Pressable onPress={p.onGallery} style={styles.ghostBtn} testID="settings-gallery-button">
+            <Smiley size={18} color={colors.brand} />
+            <Text style={styles.ghostTxt}>Expressões</Text>
+          </Pressable>
+        </View>
         <Text style={styles.section}>Como devo te chamar?</Text>
         <TextInput
           value={name}

@@ -1,4 +1,5 @@
-import { Eye, Microphone, Timer as TimerIcon, X } from "phosphor-react-native";
+import { Clock, Eye, GearSix, Microphone, Timer as TimerIcon, X } from "phosphor-react-native";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, BackHandler, Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
@@ -20,12 +21,16 @@ import {
   type Settings,
 } from "@/src/api";
 import { playOrbyVoice, stopAudio } from "@/src/audio";
-import { BottomBar } from "@/src/components/BottomBar";
+import { ControlsBar } from "@/src/components/ControlsBar";
 import { FaceTracker, faceTrackingAvailable, useTrackerPermission } from "@/src/components/FaceTracker";
+import { GallerySheet } from "@/src/components/GallerySheet";
 import { HistorySheet } from "@/src/components/HistorySheet";
-import { HudPanel, useBatteryPct, type HudState } from "@/src/components/HudPanel";
+import { RightHud, type HudState } from "@/src/components/hud/RightHud";
+import type { BrainStats } from "@/src/components/hud/BrainPanel";
 import { LiveCamera, type LiveCameraHandle } from "@/src/components/LiveCamera";
-import { RobotFace, type FaceMode } from "@/src/components/RobotFace";
+import { OrbyFace, type FaceMode } from "@/src/components/OrbyFace";
+import { useBatteryPct } from "@/src/hooks/useBattery";
+import { fetchStats } from "@/src/api";
 import { SettingsSheet } from "@/src/components/SettingsSheet";
 import { TypeSheet } from "@/src/components/TypeSheet";
 import { useVoiceLoop } from "@/src/hooks/useVoiceLoop";
@@ -49,7 +54,7 @@ export default function OrbyScreen() {
   const [caption, setCaption] = useState<{ who: "user" | "orby"; text: string }>({ who: "orby", text: "Oi! Eu sou o Orby. Diga “Orby” e fale comigo." });
   const [liveOpen, setLiveOpen] = useState(false);
   const [liveBusy, setLiveBusy] = useState(false);
-  const [sheet, setSheet] = useState<null | "settings" | "history" | "type">(null);
+  const [sheet, setSheet] = useState<null | "settings" | "history" | "type" | "gallery">(null);
   const [toast, setToast] = useState<string | null>(null);
   const [timer, setTimer] = useState<{ end: number; label: string } | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -78,7 +83,7 @@ export default function OrbyScreen() {
   const gazeX = useSharedValue(0);
   const gazeY = useSharedValue(0);
   const shiftX = useSharedValue(0);
-  const faceScale = useSharedValue(1);
+  const shiftY = useSharedValue(0);
 
   // ---------------------------------------------------------------- boot
   useEffect(() => {
@@ -106,7 +111,22 @@ export default function OrbyScreen() {
   const setTempExpression = useCallback((e: string, ms = 7000) => {
     setExpression(e);
     if (exprTimer.current) clearTimeout(exprTimer.current);
-    exprTimer.current = setTimeout(() => setExpression(modeRef.current === "sleeping" ? "sono" : "neutro"), ms);
+    exprTimer.current = setTimeout(() => setExpression(modeRef.current === "sleeping" ? "dormindo" : "calmo"), ms);
+  }, []);
+
+  // Brain panel appears while Orby thinks (if nothing else is on the panel)
+  const thinkingHud = useRef(false);
+  const startThinking = useCallback(() => {
+    setMode("thinking");
+    setExpression("pensativo");
+    if (!hudRef.current || hudRef.current.mode === "relogio") {
+      thinkingHud.current = true;
+      setHud({ mode: "cerebro" });
+    }
+  }, []);
+  const endThinkingHud = useCallback(() => {
+    if (thinkingHud.current) setHud((h) => (h?.mode === "cerebro" ? null : h));
+    thinkingHud.current = false;
   }, []);
 
   // ---------------------------------------------------------------- reply pipeline
@@ -117,9 +137,16 @@ export default function OrbyScreen() {
     if (userText) setCaption({ who: "user", text: userText });
     setTempExpression(res.expressao || "neutro", 9000);
 
-    if (res.hud?.modo === "relogio") setHud({ mode: "relogio" });
-    else if (res.hud?.modo === "fechar") setHud(null);
-    else if (res.hud?.texto) setHud({ mode: "resumo", titulo: res.hud.titulo || "Resumo", texto: res.hud.texto });
+    const h = res.hud;
+    const wasThinking = thinkingHud.current;
+    thinkingHud.current = false;
+    if (liveOpenRef.current) {
+      if (wasThinking) setHud(null);
+    } else if (h?.modo === "relogio") setHud({ mode: "relogio" });
+    else if (h?.modo === "cerebro") setHud({ mode: "cerebro" });
+    else if (h?.modo === "fechar") setHud(null);
+    else if (h?.texto || h?.itens?.length) setHud({ mode: "resumo", titulo: h.titulo || "Resumo", texto: h.texto, itens: h.itens });
+    else if (wasThinking) setHud(null);
 
     const acao = res.acao;
     if (acao?.tipo === "timer") {
@@ -157,32 +184,30 @@ export default function OrbyScreen() {
 
   const handleUtterance = useCallback(async (uri: string, manual: boolean) => {
     const requireWake = !manual && Date.now() > convUntil.current;
-    if (!requireWake) {
-      setMode("thinking");
-      setExpression("pensando");
-    }
+    if (!requireWake) startThinking();
     try {
       const img = liveOpenRef.current ? await liveRef.current?.snapshot() : null;
       const res = await sendVoice(ctx.current, uri, requireWake, img);
       if (!res.woke) {
         if (!requireWake) {
+          endThinkingHud();
           showToast(res.reason === "no_wake" ? "Não entendi, pode repetir?" : "Não ouvi direito, fala de novo?");
           setTempExpression("confuso", 2500);
           setMode(Date.now() < convUntil.current ? "conversation" : "resting");
         }
         return;
       }
-      if (modeRef.current === "sleeping") setExpression("surpreso");
       await applyReply(res as OrbyReply, res.transcript);
     } catch (e: any) {
       console.warn("[turn] failed", e);
       if (!requireWake) {
+        endThinkingHud();
         showToast(e?.message ?? "Falha na conexão");
-        setTempExpression("confuso", 3000);
+        setTempExpression("sem_graca", 3000);
         setMode("resting");
       }
     }
-  }, [applyReply, setTempExpression, showToast]);
+  }, [applyReply, setTempExpression, showToast, startThinking, endThinkingHud]);
 
   const loop = useVoiceLoop({
     enabled: loaded && settings.alwaysListen && !!session,
@@ -192,24 +217,24 @@ export default function OrbyScreen() {
   loopRef.current = loop;
 
   const sendTyped = useCallback(async (text: string) => {
-    setMode("thinking");
-    setExpression("pensando");
+    startThinking();
     setCaption({ who: "user", text });
     try {
       const res = await sendChat(ctx.current, text);
       await applyReply(res);
     } catch (e: any) {
+      endThinkingHud();
       showToast(e?.message ?? "Falha na conexão");
-      setTempExpression("confuso", 3000);
+      setTempExpression("sem_graca", 3000);
       setMode("resting");
     }
-  }, [applyReply, setTempExpression, showToast]);
+  }, [applyReply, setTempExpression, showToast, startThinking, endThinkingHud]);
 
   const describe = useCallback(async (question = "O que você está vendo agora?") => {
     if (liveBusy) return;
     setLiveBusy(true);
     setMode("thinking");
-    setExpression("curioso");
+    setExpression("atento");
     try {
       const img = await liveRef.current?.snapshot();
       if (!img) {
@@ -267,6 +292,53 @@ export default function OrbyScreen() {
     if (loop.phase === "capturing") lastActivity.current = Date.now();
   }, [loop.phase]);
 
+  // Idle life: small human-like micro expressions while resting
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      t = setTimeout(() => {
+        const idle = Date.now() - lastActivity.current;
+        if (modeRef.current === "resting" && !busyReply.current) {
+          const pool = idle > 90000 ? ["sonolento", "entediado", "calmo"]
+            : idle > 45000 ? ["entediado", "duvida", "calmo", "timido"]
+            : ["contente", "duvida", "timido", "calmo", "alegre"];
+          setTempExpression(pool[Math.floor(Math.random() * pool.length)], 2600);
+        }
+        tick();
+      }, 18000 + Math.random() * 22000);
+    };
+    tick();
+    return () => clearTimeout(t);
+  }, [setTempExpression]);
+
+  // Brain panel numbers: real counts + live jitter while thinking
+  const [stats, setStats] = useState<BrainStats>({ neural: 92, internet: 87, database: 76, context: 84 });
+  useEffect(() => {
+    if (hud?.mode !== "cerebro" || !session) return;
+    let alive = true;
+    const t0 = Date.now();
+    fetchStats(session)
+      .then((s) => {
+        if (!alive) return;
+        const ping = Date.now() - t0;
+        setStats({
+          neural: Math.min(99, 70 + s.memories * 3),
+          internet: Math.max(40, Math.min(99, 100 - ping / 25)),
+          database: Math.min(99, 60 + (s.messages % 40)),
+          context: 80,
+        });
+      })
+      .catch(() => {});
+    const j = setInterval(() => {
+      if (modeRef.current !== "thinking") return;
+      setStats((s) => ({ ...s, context: 70 + Math.random() * 29, neural: Math.min(99, s.neural + (Math.random() - 0.4)) }));
+    }, 700);
+    return () => {
+      alive = false;
+      clearInterval(j);
+    };
+  }, [hud?.mode, session]);
+
   // ---------------------------------------------------------------- eyes: face tracking + micro-glances
   const onFace = useCallback((x: number, y: number, smiling: number, closeness: number) => {
     const n = Date.now();
@@ -301,7 +373,7 @@ export default function OrbyScreen() {
           let x = 0;
           let y = 0;
           if (hudOpen) {
-            x = -0.75 + Math.random() * 0.2;
+            x = 0.6 + Math.random() * 0.3;
             y = -0.1 + Math.random() * 0.3;
           } else if (m !== "sleeping" && Math.random() > 0.35) {
             x = (Math.random() * 2 - 1) * 0.6;
@@ -318,27 +390,33 @@ export default function OrbyScreen() {
     return () => clearTimeout(t);
   }, [gazeX, gazeY]);
 
-  // ---------------------------------------------------------------- layout: face slides right when the left HUD opens
-  const eyeSize = Math.min((landscape ? height : width) * (landscape ? 0.36 : 0.27), 150);
-  const faceW = eyeSize * 2.42 + eyeSize * 0.8;
-  const hudWidth = hud?.mode === "resumo"
-    ? Math.min(480, landscape ? width * 0.5 : width * 0.72)
-    : Math.min(340, landscape ? width * 0.42 : width * 0.72);
+  // ---------------------------------------------------------------- layout: face slides left when the HUD opens on the right
+  const sideL = insets.left + spacing.lg;
+  const sideR = insets.right + spacing.lg;
+  const faceW = landscape ? Math.min(width * 0.44, height * 1.1) : width * 0.82;
+  const panelOpen = !!hud || liveOpen;
+  const hudWidth = landscape
+    ? hud?.mode === "relogio" && !liveOpen ? Math.min(width * 0.36, 420) : Math.min(width * 0.46, 620)
+    : width - sideL - sideR;
+  const hudLeft = landscape ? width - sideR - hudWidth : sideL;
+  const hudTop = landscape ? Math.max(insets.top + 20, height * (hud?.mode === "relogio" && !liveOpen ? 0.3 : 0.1)) : height * 0.44;
   const hudRef = useRef(hud);
   hudRef.current = hud;
 
   useEffect(() => {
-    if (hud) {
-      const left = 16 + hudWidth;
-      const free = width - left;
-      shiftX.value = withSpring(left + free / 2 - width / 2, { damping: 16, stiffness: 110 });
-      faceScale.value = withSpring(Math.max(0.36, Math.min(1, (free - 8) / faceW)), { damping: 16, stiffness: 110 });
-      gazeX.value = withSpring(-0.75);
+    const spring = { damping: 16, stiffness: 110 };
+    if (panelOpen && landscape) {
+      shiftX.value = withSpring((hudLeft - sideL) / 2 + sideL - width / 2, spring);
+      shiftY.value = withSpring(0, spring);
+      gazeX.value = withSpring(0.7);
+    } else if (panelOpen) {
+      shiftX.value = withSpring(0, spring);
+      shiftY.value = withSpring(-height * 0.22, spring);
     } else {
-      shiftX.value = withSpring(0, { damping: 16, stiffness: 110 });
-      faceScale.value = withSpring(1, { damping: 16, stiffness: 110 });
+      shiftX.value = withSpring(0, spring);
+      shiftY.value = withSpring(0, spring);
     }
-  }, [hud, hudWidth, width, faceW, shiftX, faceScale, gazeX]);
+  }, [panelOpen, landscape, hudLeft, sideL, width, height, shiftX, shiftY, gazeX]);
 
   useEffect(() => {
     if (hud?.mode !== "relogio") return;
@@ -378,17 +456,19 @@ export default function OrbyScreen() {
     return mode === "conversation" ? "conversation" : "resting";
   }, [mode, capturing]);
 
-  const faceExpr = faceMode === "listening" && expression === "neutro" ? "ouvindo" : expression;
+  const faceExpr = faceMode === "sleeping"
+    ? (["sono", "dormindo", "sono_profundo", "sonolento"].includes(expression) ? expression : "dormindo")
+    : capturing && mode === "conversation" && ["calmo", "neutro"].includes(expression) ? "atento" : expression;
 
   const micOff = loop.permission !== "granted";
-  const status = mode === "speaking" ? "FALANDO"
-    : mode === "thinking" ? "PENSANDO..."
-    : capturing ? "OUVINDO..."
-    : micOff ? "MICROFONE DESLIGADO"
-    : mode === "sleeping" ? "DORMINDO · DIGA “ORBY”"
-    : mode === "conversation" ? "CONVERSANDO · PODE FALAR"
-    : settings.alwaysListen && loop.continuousOk ? "DESCANSO · DIGA “ORBY”"
-    : "TOQUE NO MICROFONE";
+  const status = mode === "speaking" ? "Falando"
+    : mode === "thinking" ? "Pensando"
+    : capturing ? "Ouvindo"
+    : micOff ? "Mic desligado"
+    : mode === "sleeping" ? "Dormindo"
+    : mode === "conversation" ? "Conversando"
+    : settings.alwaysListen && loop.continuousOk ? "Descanso"
+    : "Toque p/ falar";
 
   const onMic = async () => {
     if (mode === "speaking") {
@@ -427,23 +507,38 @@ export default function OrbyScreen() {
 
   return (
     <View style={styles.root} testID="orby-screen">
+      <Svg style={StyleSheet.absoluteFill} width={width} height={height} pointerEvents="none">
+        <Defs>
+          <RadialGradient id="ambient" cx="50%" cy="45%" rx="55%" ry="60%">
+            <Stop offset="0" stopColor={colors.ambient} stopOpacity={0.75} />
+            <Stop offset="1" stopColor={colors.surface} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width={width} height={height} fill="url(#ambient)" />
+      </Svg>
+
       <View style={styles.faceLayer} pointerEvents="none">
-        <RobotFace expression={faceExpr} mode={faceMode} gazeX={gazeX} gazeY={gazeY} size={eyeSize} shiftX={shiftX} scale={faceScale} />
+        <OrbyFace expression={faceExpr} mode={faceMode} gazeX={gazeX} gazeY={gazeY} width={faceW} shiftX={shiftX} shiftY={shiftY} />
       </View>
 
-      <HudPanel
+      <RightHud
         hud={hud}
         width={hudWidth}
-        top={insets.top + (landscape ? 56 : height * 0.2)}
-        maxHeight={landscape ? height * 0.42 : height * 0.36}
+        left={hudLeft}
+        top={hudTop}
+        maxTextHeight={landscape ? height * 0.52 : height * 0.3}
+        clockSize={landscape ? Math.min(height * 0.22, 96) : 72}
+        stats={stats}
         onClose={() => setHud(null)}
+        live={liveOpen ? (
+          <LiveCamera ref={liveRef} busy={liveBusy} height={landscape ? height * 0.5 : height * 0.32} onClose={() => setLiveOpen(false)} onDescribe={() => describe()} onReady={() => describe()} />
+        ) : undefined}
       />
 
-      {/* top status */}
-      <View style={[styles.top, { top: insets.top + spacing.sm }]} pointerEvents="box-none">
-        <Pressable onPress={() => setHud(hud ? null : { mode: "relogio" })} style={styles.status} testID="status-chip">
-          <View style={[styles.dot, { backgroundColor: micOff ? colors.error : capturing ? colors.success : colors.brand }]} />
-          <Text style={styles.statusTxt} testID="status-text">{status}</Text>
+      {/* top-left: timer chip | top-right: tracker preview + settings */}
+      <View style={[styles.top, { top: insets.top + spacing.lg, left: sideL }]} pointerEvents="box-none">
+        <Pressable onPress={() => setHud(hud ? null : { mode: "relogio" })} hitSlop={8} style={styles.clockBtn} testID="status-chip">
+          <Clock size={24} color={colors.brand} weight="duotone" />
         </Pressable>
         {timer && (
           <View style={styles.status} testID="timer-chip">
@@ -455,33 +550,32 @@ export default function OrbyScreen() {
           </View>
         )}
       </View>
-
-      {/* camera corner: face tracker preview or Gemini Live */}
-      <View style={[styles.corner, { top: insets.top + 52 }]} pointerEvents="box-none">
-        {liveOpen ? (
-          <LiveCamera ref={liveRef} busy={liveBusy} onClose={() => setLiveOpen(false)} onDescribe={() => describe()} onReady={() => describe()} />
-        ) : (
-          settings.tracking && (
-            <FaceTracker active={!liveOpen && AppState.currentState === "active"} granted={tracker.granted} mirror={settings.mirror} preview={settings.preview} onFace={onFace} />
-          )
+      <View style={[styles.corner, { top: insets.top + spacing.lg, right: sideR }]} pointerEvents="box-none">
+        {settings.tracking && !liveOpen && (
+          <FaceTracker active={AppState.currentState === "active"} granted={tracker.granted} mirror={settings.mirror} preview={settings.preview} onFace={onFace} />
         )}
+        <Pressable onPress={() => setSheet("settings")} style={styles.gear} testID="settings-button">
+          <GearSix size={30} color={colors.brand} weight="fill" />
+        </Pressable>
       </View>
 
       {/* captions */}
-      <View style={[styles.captionWrap, { bottom: barBottom + 84 }]} pointerEvents="none">
-        <Animated.Text
-          key={caption.text}
-          entering={FadeInDown.duration(260)}
-          style={[styles.caption, caption.who === "user" && styles.captionUser]}
-          numberOfLines={3}
-          testID="caption-text"
-        >
-          {caption.who === "user" ? `Você: ${caption.text}` : caption.text}
-        </Animated.Text>
-      </View>
+      {!(landscape && panelOpen) && (
+        <View style={[styles.captionWrap, { bottom: barBottom + (landscape ? 4 : 76), left: landscape ? width * 0.42 : spacing.xl, right: sideR + spacing.lg }]} pointerEvents="none">
+          <Animated.Text
+            key={caption.text}
+            entering={FadeInDown.duration(260)}
+            style={[styles.caption, caption.who === "user" && styles.captionUser]}
+            numberOfLines={landscape ? 2 : 3}
+            testID="caption-text"
+          >
+            {caption.who === "user" ? `Você: ${caption.text}` : caption.text}
+          </Animated.Text>
+        </View>
+      )}
 
       {showMicCard && (
-        <Animated.View entering={FadeIn} style={[styles.card, { bottom: barBottom + 84 }]} testID="mic-permission-card">
+        <Animated.View entering={FadeIn} style={[styles.card, { bottom: barBottom + 72 }]} testID="mic-permission-card">
           <Microphone size={22} color={colors.brand} weight="fill" />
           <Text style={styles.cardTxt}>Libere o microfone para o Orby ficar em modo descanso e acordar quando você disser “Orby”.</Text>
           {loop.permission === "blocked" ? (
@@ -500,7 +594,7 @@ export default function OrbyScreen() {
       )}
 
       {showEyeCard && (
-        <Animated.View entering={FadeIn} style={[styles.card, { bottom: barBottom + 84 }]} testID="eye-permission-card">
+        <Animated.View entering={FadeIn} style={[styles.card, { bottom: barBottom + 72 }]} testID="eye-permission-card">
           <Eye size={22} color={colors.brand} weight="fill" />
           <Text style={styles.cardTxt}>Deixe os olhos do Orby te acompanharem pela câmera frontal (tudo no aparelho).</Text>
           {tracker.canAsk ? (
@@ -524,9 +618,11 @@ export default function OrbyScreen() {
         </Animated.View>
       )}
 
-      <BottomBar
+      <ControlsBar
+        left={sideL}
         bottom={barBottom}
-        capturing={capturing}
+        status={status}
+        active={capturing}
         level={loop.level}
         liveOpen={liveOpen}
         sound={settings.sound}
@@ -536,8 +632,6 @@ export default function OrbyScreen() {
           if (settings.sound) stopAudio();
           updateSettings({ sound: !settings.sound });
         }}
-        onType={() => setSheet("type")}
-        onMenu={() => setSheet("settings")}
       />
 
       <SettingsSheet
@@ -548,6 +642,8 @@ export default function OrbyScreen() {
         onChange={updateSettings}
         onClose={() => setSheet(null)}
         onHistory={() => setSheet("history")}
+        onType={() => setSheet("type")}
+        onGallery={() => setSheet("gallery")}
         onClearMemories={async () => {
           await clearMemories(session);
           showToast("Memórias apagadas.");
@@ -556,14 +652,39 @@ export default function OrbyScreen() {
       />
       <HistorySheet visible={sheet === "history"} session={session} onClose={() => setSheet(null)} />
       <TypeSheet visible={sheet === "type"} onClose={() => setSheet(null)} onSend={sendTyped} />
+      <GallerySheet
+        visible={sheet === "gallery"}
+        onClose={() => setSheet(null)}
+        onPick={(k) => {
+          setSheet(null);
+          lastActivity.current = Date.now();
+          if (modeRef.current === "sleeping") setMode("resting");
+          setTempExpression(k, 4000);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface, overflow: "hidden" },
-  faceLayer: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", paddingBottom: 60 },
-  top: { position: "absolute", left: spacing.lg, right: spacing.lg, flexDirection: "row", gap: spacing.sm, alignItems: "center" },
+  faceLayer: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", paddingBottom: 40 },
+  gear: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.glass,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.brand,
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  clockBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", opacity: 0.7 },
+  top: { position: "absolute", flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   status: {
     flexDirection: "row",
     alignItems: "center",
@@ -577,8 +698,8 @@ const styles = StyleSheet.create({
   },
   dot: { width: 8, height: 8, borderRadius: 4 },
   statusTxt: { fontFamily: fonts.displayBold, color: colors.brand, fontSize: 13, letterSpacing: 1.5 },
-  corner: { position: "absolute", right: spacing.lg, alignItems: "flex-end" },
-  captionWrap: { position: "absolute", left: spacing.xl, right: spacing.xl, alignItems: "center" },
+  corner: { position: "absolute", flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  captionWrap: { position: "absolute", alignItems: "center" },
   caption: {
     fontFamily: fonts.text,
     color: colors.hudText,
@@ -592,8 +713,9 @@ const styles = StyleSheet.create({
   captionUser: { color: colors.muted, fontSize: 14 },
   card: {
     position: "absolute",
-    left: spacing.lg,
-    right: spacing.lg,
+    alignSelf: "center",
+    width: "92%",
+    maxWidth: 560,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,

@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 2 full-stack testing of Orby (landscape sci-fi HUD redesign + 56-expression catalogue). Backend: 22/22 pytest green (adds 4 new iteration-2 tests: test_chat_expressao_from_56_list, test_chat_hud_itens_rotulo_texto_for_explanation, test_chat_local_cerebro_intent, test_stats_endpoint; previous 18 regression tests all pass). Frontend LANDSCAPE 844x390: orby-screen, robot-face, settings-button, status-chip, mic-button, sound-toggle-button, gemini-live-button all render; status-chip toggles clock HUD on the right (hud-panel + hud-clock-time + hud-battery visible); settings-sheet -> type-message-button -> type-message-input works, send triggers thinking state showing hud-brain + all four stats (hud-stat-neural, hud-stat-internet, hud-stat-database, hud-stat-context) while awaiting Gemini, then summary panel (hud-summary-title + hud-summary-text) appears; typed 'mostra seu cérebro' -> hud-brain (local intent, confirmed by backend test_chat_local_cerebro_intent returning kind=local, hud.modo=cerebro); settings-gallery-button opens gallery-sheet with exactly 56 gallery-face-* tiles; tapping gallery-face-apaixonado closes the sheet and face-expression-apaixonado renders on the face; gemini-live-button opens gemini-live-panel inside the right HUD; portrait 390x844 keeps all core controls (orby-screen, robot-face, settings-button, mic-button, sound-toggle-button, gemini-live-button, status-chip) visible and usable with no overlap.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "SummaryPanel/BrainPanel (Reanimated layout animation)", "issue": "Console warning: '[Reanimated] Property [opacity] may be overwritten by a layout animation. Please wrap your component with an animated view and apply the layout animation on the wrapper.' Fires when hud panels enter/exit. Cosmetic warning only, animation plays correctly. Reference: likely in /app/frontend/src/components/hud/SummaryPanel.tsx and /app/frontend/src/components/hud/BrainPanel.tsx — wrap the inner opacity-styled view with an Animated.View that owns the entering/exiting layout animation."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_orby_backend.py",
+    "/app/test_reports/pytest/orby_results.xml"
+  ],
+  "action_items": [
+    "(Minor polish, non-blocking) Wrap the opacity-animated inner View inside SummaryPanel/BrainPanel with an outer Animated.View that owns the FadeIn/FadeOut layout animation to silence the Reanimated warning.",
+    "(Observation) The specific prompt 'Como funcionam os painéis solares...' sometimes makes Gemini return hud.texto (single paragraph) instead of hud.itens list; both shapes are supported by the frontend (hud-summary-text renders) and backend. The itens-with-rotulo path is validated by test_chat_hud_itens_rotulo_texto_for_explanation using a 'me explica em tópicos' prompt that reliably triggers itens.",
+    "(Observation, same as iter 1) After hud-close-button tap the hud-summary-title element remains in the DOM briefly due to reanimated FadeOut; UX correct, visibility toggle is immediate."
+  ],
+  "critical_code_review_comments": [
+    "server.py: new 56-key EXPRESSION_GUIDE with human-mapping guidance in the system prompt is clean; parse_reply falls back to 'calmo' on unknown expressao — good defensive validation.",
+    "server.py: local_intent for 'mostra seu cerebro' is matched BEFORE Gemini and returns hud.modo=cerebro with kind='local' — fast + predictable; test_chat_local_cerebro_intent confirms sub-second response.",
+    "server.py: new /api/stats/{session_id} returns {memories, messages} as ints — used by frontend brain panel to drive 'conexões neurais' bar — verified via test_stats_endpoint.",
+    "index.tsx: thinkingHud ref flow (startThinking -> setHud cerebro, applyReply clears if wasThinking and no new hud) is correct, so brain panel appears while thinking and transitions cleanly to summary.",
+    "index.tsx: landscape face shift (shiftX) is computed from hudLeft/sideL/width via useSharedValue+withSpring — tested visually, face correctly shifts left when HUD opens on the right.",
+    "Frontend uses process.env.EXPO_PUBLIC_BACKEND_URL throughout; no hardcoded URLs; all 15+ interactive elements expose testIDs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_orby_backend.py (added 4 iteration-2 tests: test_chat_expressao_from_56_list, test_chat_hud_itens_rotulo_texto_for_explanation, test_chat_local_cerebro_intent, test_stats_endpoint; now 22 tests total)"
+  ],
+  "success_rate": {"backend": "100% (22/22)", "frontend": "100% of in-scope flows (face tracking + continuous mic are native-only, out of scope on web; camera permission on headless web is expected to be unavailable)"},
+  "seed_data_creation": "Tests create and clean up session TEST_orby_<uuid>; test_clear_history_and_memories wipes session data at the end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/test_orby_backend.py (22 tests, ~44s with pytest-xdist on 2 workers). Requires Pillow (installed). Frontend testIDs confirmed this iteration: orby-screen, robot-face, settings-button, status-chip, mic-button, sound-toggle-button, gemini-live-button, hud-panel, hud-clock-time, hud-battery, hud-brain, hud-stat-neural, hud-stat-internet, hud-stat-database, hud-stat-context, hud-summary-title, hud-summary-text, hud-close-button, type-message-button, type-message-input, type-message-send-button, settings-gallery-button, gallery-sheet, gallery-face-* (56 tiles including gallery-face-apaixonado), face-expression-<key> (e.g. face-expression-apaixonado), gemini-live-panel. Landscape viewport 844x390 is the primary design target. Backend URL: EXPO_PUBLIC_BACKEND_URL (also in /app/frontend/.env).",
+  "rca_of_issue": "N/A — no bugs found. All iteration-2 features verified end-to-end."
+}

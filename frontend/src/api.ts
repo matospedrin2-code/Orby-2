@@ -4,7 +4,12 @@ import { uploadForm } from "@/src/utils/upload";
 
 export const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL as string;
 
-export type HudData = { modo?: "relogio" | "fechar"; titulo?: string; texto?: string } | null;
+export type HudData = {
+  modo?: "relogio" | "fechar" | "cerebro";
+  titulo?: string;
+  texto?: string;
+  itens?: { rotulo?: string; texto: string }[];
+} | null;
 export type Action = { tipo: string; [k: string]: any } | null;
 export type OrbyReply = {
   fala: string;
@@ -153,4 +158,8 @@ export async function fetchMemories(session: string): Promise<{ id: string; fact
 
 export async function clearMemories(session: string) {
   return json(await fetch(`${BACKEND}/api/memories/${session}`, { method: "DELETE" }));
+}
+
+export async function fetchStats(session: string): Promise<{ memories: number; messages: number }> {
+  return json(await fetch(`${BACKEND}/api/stats/${session}`));
 }

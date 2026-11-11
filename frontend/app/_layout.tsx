@@ -2,7 +2,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, LogBox, StyleSheet, View } from "react-native";
+import * as ScreenOrientation from "expo-screen-orientation";
+import { ActivityIndicator, LogBox, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
@@ -13,6 +14,11 @@ import { colors } from "@/src/theme";
 // Disable logbox errors etc so that users can see the app
 // and agent works as expected.
 LogBox.ignoreAllLogs(true);
+
+// Orby lives in landscape, like the robot face reference
+if (Platform.OS !== "web") {
+  ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({

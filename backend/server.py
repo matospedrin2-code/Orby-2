@@ -82,19 +82,40 @@ class Memory(BaseDocument):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
-EXPRESSIONS = ["neutro", "feliz", "animado", "surpreso", "triste", "bravo", "determinado", "desconfiado",
-               "sono", "amoroso", "pensando", "vergonha", "brincalhao", "curioso", "confuso", "orgulhoso"]
+EXPRESSION_GUIDE = {
+    "neutro": "neutro, informativo", "calmo": "tranquilo, padrão simpático", "feliz": "feliz",
+    "muito_feliz": "rindo, muito feliz", "fofo": "fofo, carinhoso", "alegre": "alegre conversando",
+    "contente": "satisfeito", "radiante": "empolgado com boa notícia", "maravilhado": "deslumbrado, achou incrível",
+    "sereno": "em paz, agradecido", "apaixonado": "adorou algo", "animado": "muito empolgado",
+    "piscadinha": "cúmplice, segredinho", "brincalhao": "brincadeira", "chocado": "chocado",
+    "surpreso": "surpreso", "nervoso": "nervoso", "assustado": "assustado", "apavorado": "em pânico",
+    "preocupado": "preocupado", "desconfiado": "desconfiado", "bravo": "bravo", "irritado": "irritado",
+    "furioso": "furioso", "emburrado": "fazendo bico", "determinado": "focado, determinado",
+    "rabugento": "mal-humorado", "cansado": "cansado", "triste": "triste", "chorando": "chorando muito",
+    "melancolico": "chateado", "choroso": "magoado com lágrimas", "comovido": "emocionado",
+    "sonolento": "com sono, bocejando", "dormindo": "dormindo", "sono_profundo": "sono profundo",
+    "timido": "tímido", "encantado": "encantado", "beijinho": "mandando beijo", "envergonhado": "envergonhado (elogiado)",
+    "amoroso": "carinho", "sem_graca": "constrangido, errou algo", "confuso": "confuso",
+    "pensativo": "pensando", "cetico": "duvidando", "duvida": "curioso, com dúvida", "tonto": "zonzo",
+    "entediado": "entediado", "confiante": "orgulhoso, confiante", "marotinho": "sapeca",
+    "descolado": "de boa, descolado", "zoeiro": "provocando de brincadeira", "serio": "sério",
+    "ansioso": "ansioso", "coracao": "gratidão, fofura", "atento": "ouvindo atento",
+}
+EXPRESSIONS = list(EXPRESSION_GUIDE.keys())
 
 SYSTEM_PROMPT = """Você é o Orby, um robozinho companheiro com rosto de olhos neon que vive no celular do usuário.
 Personalidade: vivo, jovial, carinhoso, curioso, divertido e muito inteligente (como o Gemini). Fala português do Brasil, natural e falado.
 Você entende frases longas e complexas: leia TUDO o que o usuário disse e responda a todos os pontos.
 Responda SEMPRE e SOMENTE com um JSON válido (sem markdown) neste formato:
 {{"fala": "o que você vai falar em voz alta (curto e natural, até ~3 frases, a menos que peçam detalhes)",
- "expressao": "uma de: {expr}",
- "hud": null ou {{"titulo": "título curto", "texto": "resumo/explicação detalhada para ler no painel"}},
+ "expressao": "a expressão facial que um humano faria nesse momento, uma de: {expr}",
+ "hud": null ou {{"titulo": "título curto", "itens": [{{"rotulo": "O que você perguntou", "texto": "..."}}, {{"rotulo": "Resumo", "texto": "..."}}, {{"rotulo": "Vantagens", "texto": "..."}}, {{"rotulo": "Conclusão", "texto": "..."}}]}} ou {{"modo": "cerebro"}} ou {{"modo": "relogio"}},
  "acao": null ou uma ação,
  "memoria": null ou "fato importante e duradouro sobre o usuário para lembrar"}}
-Use "hud" quando a resposta tiver conteúdo para ler (pesquisa, lista, receita, explicação, resumo, tradução).
+Escolha a expressão como um rosto humano reagiria: elogio -> envergonhado/timido; boa notícia -> radiante/muito_feliz; piada -> muito_feliz/zoeiro;
+notícia triste -> triste/comovido; pergunta difícil -> determinado; algo incrível -> maravilhado; carinho -> amoroso/coracao; erro seu -> sem_graca.
+Use "hud" com itens (3 a 6 tópicos curtos, rótulo + texto) quando a resposta tiver conteúdo para ler (pesquisa, lista, receita, explicação, comparação).
+Use {{"modo": "cerebro"}} se perguntarem sobre você, seu cérebro, como você funciona ou seu status.
 Ações possíveis (o app executa no celular):
 {{"tipo":"email","para":"email ou vazio","assunto":"...","corpo":"..."}}
 {{"tipo":"agenda","titulo":"...","inicio":"AAAA-MM-DDTHH:MM","duracao_min":60,"detalhes":"..."}}
@@ -145,11 +166,19 @@ def parse_reply(raw: str) -> dict:
         except Exception:
             data = None
     if not isinstance(data, dict):
-        data = {"fala": raw or "Hmm, não consegui pensar direito agora.", "expressao": "confuso"}
+        data = {"fala": raw or "Hmm, não consegui pensar direito agora.", "expressao": "sem_graca"}
     if data.get("expressao") not in EXPRESSIONS:
-        data["expressao"] = "neutro"
+        data["expressao"] = "calmo"
     hud = data.get("hud")
-    if not (isinstance(hud, dict) and hud.get("texto")):
+    if isinstance(hud, dict) and hud.get("modo") in ("cerebro", "relogio"):
+        data["hud"] = {"modo": hud["modo"]}
+    elif isinstance(hud, dict) and (hud.get("texto") or isinstance(hud.get("itens"), list)):
+        itens = [i for i in (hud.get("itens") or []) if isinstance(i, dict) and i.get("texto")]
+        data["hud"] = {"titulo": str(hud.get("titulo") or "Resumo"), "texto": hud.get("texto") or None,
+                       "itens": [{"rotulo": str(i.get("rotulo") or ""), "texto": str(i["texto"])} for i in itens][:8]}
+        if not data["hud"]["itens"] and not data["hud"]["texto"]:
+            data["hud"] = None
+    else:
         data["hud"] = None
     if not isinstance(data.get("acao"), dict):
         data["acao"] = None
@@ -163,7 +192,7 @@ async def build_system(session_id: str, name: str, client_time: str) -> str:
     msgs = await db.messages.find({"session_id": session_id}).sort("created_at", -1).to_list(16)
     msgs = [Message.from_mongo(m) for m in reversed(msgs)]
     history = "\n".join(f"{'Usuário' if m.role == 'user' else 'Orby'}: {m.text[:600]}" for m in msgs) or "(início)"
-    return SYSTEM_PROMPT.format(expr=", ".join(EXPRESSIONS), now=client_time or datetime.now().isoformat(),
+    return SYSTEM_PROMPT.format(expr=", ".join(f"{k} ({v})" for k, v in EXPRESSION_GUIDE.items()), now=client_time or datetime.now().isoformat(),
                                 name=name or "não informado", memories=memories, history=history)
 
 
@@ -210,6 +239,7 @@ LOCAL_PATTERNS = [
     (re.compile(r"\b(bateria)\b"), "bateria"),
     (re.compile(r"\b(fecha o painel|fechar painel|fecha painel|esconde o painel)\b"), "fechar"),
     (re.compile(r"\b(vai dormir|pode dormir|descansa|modo descanso|vai descansar)\b"), "dormir"),
+    (re.compile(r"\b(mostra seu cerebro|seu status|mostra o cerebro|painel do cerebro)\b"), "cerebro"),
 ]
 
 
@@ -238,8 +268,11 @@ def local_intent(text: str, client_time: str, battery: Optional[int]) -> Optiona
             if kind == "fechar":
                 return {"fala": "Pronto, fechei o painel.", "expressao": "feliz", "hud": {"modo": "fechar"},
                         "acao": None, "memoria": None}
+            if kind == "cerebro":
+                return {"fala": "Olha só como minhas conexões estão agora!", "expressao": "confiante",
+                        "hud": {"modo": "cerebro"}, "acao": None, "memoria": None}
             if kind == "dormir":
-                return {"fala": "Tá bom, vou descansar. É só me chamar de Orby.", "expressao": "sono", "hud": None,
+                return {"fala": "Tá bom, vou descansar. É só me chamar de Orby.", "expressao": "sonolento", "hud": None,
                         "acao": {"tipo": "dormir"}, "memoria": None}
     return None
 
@@ -390,6 +423,12 @@ async def memories(session_id: str):
 async def clear_memories(session_id: str):
     await db.memories.delete_many({"session_id": session_id})
     return {"ok": True}
+
+
+@api_router.get("/stats/{session_id}")
+async def stats(session_id: str):
+    return {"memories": await db.memories.count_documents({"session_id": session_id}),
+            "messages": await db.messages.count_documents({"session_id": session_id})}
 
 
 app.include_router(api_router)

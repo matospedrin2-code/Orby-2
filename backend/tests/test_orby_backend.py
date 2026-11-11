@@ -294,6 +294,78 @@ def test_clear_history_and_memories(api):
     assert r3.status_code == 200 and r3.json() == []
 
 
+# ---------------------------------------------------------------- iteration 2: new 56-expression catalogue, cerebro intent, stats
+EXPRESSIONS_56 = {
+    "neutro", "calmo", "feliz", "muito_feliz", "fofo", "alegre", "contente", "radiante", "maravilhado",
+    "sereno", "apaixonado", "animado", "piscadinha", "brincalhao", "chocado", "surpreso", "nervoso",
+    "assustado", "apavorado", "preocupado", "desconfiado", "bravo", "irritado", "furioso", "emburrado",
+    "determinado", "rabugento", "cansado", "triste", "chorando", "melancolico", "choroso", "comovido",
+    "sonolento", "dormindo", "sono_profundo", "timido", "encantado", "beijinho", "envergonhado",
+    "amoroso", "sem_graca", "confuso", "pensativo", "cetico", "duvida", "tonto", "entediado",
+    "confiante", "marotinho", "descolado", "zoeiro", "serio", "ansioso", "coracao", "atento",
+}
+
+
+def test_chat_expressao_from_56_list(api):
+    """Any /api/chat reply must contain expressao within the new 56-key list."""
+    body = {
+        "session_id": SESSION,
+        "text": "Me conta uma coisa fofa sobre gatinhos",
+        "client_time": "2026-01-15T09:00:00",
+        "speak": False,
+    }
+    r = api.post(f"{BASE_URL}/api/chat", json=body, timeout=120)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["expressao"] in EXPRESSIONS_56, f"expressao not in catalogue: {data['expressao']}"
+
+
+def test_chat_hud_itens_rotulo_texto_for_explanation(api):
+    """Explanation question should return hud with itens list of {rotulo,texto}."""
+    body = {
+        "session_id": SESSION,
+        "text": "Como funcionam os painéis solares e se valem a pena? Me explica em tópicos.",
+        "client_time": "2026-01-15T09:00:00",
+        "speak": False,
+    }
+    r = api.post(f"{BASE_URL}/api/chat", json=body, timeout=120)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("hud"), f"expected hud, got {data}"
+    hud = data["hud"]
+    # itens must be list of {rotulo,texto}
+    assert isinstance(hud.get("itens"), list) and len(hud["itens"]) > 0, f"hud missing itens: {hud}"
+    for it in hud["itens"]:
+        assert isinstance(it, dict)
+        assert "rotulo" in it and "texto" in it
+        assert isinstance(it["texto"], str) and len(it["texto"]) > 0
+
+
+def test_chat_local_cerebro_intent(api):
+    """'mostra seu cérebro' -> local intent, hud.modo=cerebro, kind=local."""
+    body = {
+        "session_id": SESSION,
+        "text": "mostra seu cérebro",
+        "client_time": "2026-01-15T09:00:00",
+        "speak": False,
+    }
+    r = api.post(f"{BASE_URL}/api/chat", json=body, timeout=30)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["kind"] == "local", f"expected local, got {data['kind']}"
+    assert data["hud"] and data["hud"].get("modo") == "cerebro", f"got hud={data['hud']}"
+
+
+def test_stats_endpoint(api):
+    """GET /api/stats/{session_id} -> {memories, messages}."""
+    r = api.get(f"{BASE_URL}/api/stats/{SESSION}", timeout=15)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "memories" in data and "messages" in data
+    assert isinstance(data["memories"], int) and isinstance(data["messages"], int)
+    assert data["memories"] >= 0 and data["messages"] >= 0
+
+
 # ---------------------------------------------------------------- validation
 def test_chat_empty_text_rejected(api):
     r = api.post(

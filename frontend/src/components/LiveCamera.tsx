@@ -7,10 +7,10 @@ import { colors, fonts, radius, spacing } from "@/src/theme";
 
 export type LiveCameraHandle = { snapshot: () => Promise<string | null> };
 
-type Props = { busy: boolean; onClose: () => void; onDescribe: () => void; onReady: () => void };
+type Props = { busy: boolean; height: number; onClose: () => void; onDescribe: () => void; onReady: () => void };
 
 // Gemini Live: Orby looks through the camera and describes what he sees.
-export const LiveCamera = forwardRef<LiveCameraHandle, Props>(function LiveCamera({ busy, onClose, onDescribe, onReady }, ref) {
+export const LiveCamera = forwardRef<LiveCameraHandle, Props>(function LiveCamera({ busy, height, onClose, onDescribe, onReady }, ref) {
   const [perm, request] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>("back");
   const cam = useRef<CameraView>(null);
@@ -41,7 +41,7 @@ export const LiveCamera = forwardRef<LiveCameraHandle, Props>(function LiveCamer
           <X size={18} color={colors.brand} weight="bold" />
         </Pressable>
       </View>
-      <View style={styles.viewport}>
+      <View style={[styles.viewport, { height }]}>
         {!perm ? (
           <ActivityIndicator color={colors.brand} />
         ) : granted ? (
@@ -94,19 +94,8 @@ export const LiveCamera = forwardRef<LiveCameraHandle, Props>(function LiveCamer
 });
 
 const styles = StyleSheet.create({
-  card: {
-    width: 220,
-    backgroundColor: colors.glass,
-    borderWidth: 1.5,
-    borderColor: colors.brand,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    shadowColor: colors.brand,
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  head: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginBottom: spacing.sm, paddingLeft: spacing.xs },
+  card: { width: "100%" },
+  head: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginBottom: spacing.sm, paddingLeft: spacing.xs, paddingRight: 60 },
   title: { flex: 1, fontFamily: fonts.displayBold, color: colors.brand, fontSize: 14, letterSpacing: 2 },
   viewport: { height: 260, borderRadius: radius.sm, overflow: "hidden", backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   permBox: { padding: spacing.md, alignItems: "center", gap: spacing.sm },
